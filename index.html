@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trending From Obscurity</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, sans-serif;
+    background: #0d1117; color: #c9d1d9;
+    line-height: 1.5; padding: 2rem;
+    max-width: 1100px; margin: 0 auto;
+  }
+
+  h1 { font-size: 1.6rem; font-weight: 600; color: #e6edf3; }
+  .tagline { color: #7d8590; font-size: 0.85rem; margin-top: 0.25rem; }
+
+  /* Search form */
+  .search-bar {
+    display: flex; flex-wrap: wrap; gap: 0.5rem;
+    margin: 1.5rem 0; align-items: flex-end;
+  }
+  .field { display: flex; flex-direction: column; gap: 0.2rem; }
+  .field label { font-size: 0.7rem; color: #7d8590; text-transform: uppercase; letter-spacing: 0.05em; }
+  .field.query { flex: 1; min-width: 200px; }
+
+  input, select, button {
+    font-family: inherit; font-size: 0.9rem;
+    background: #161b22; color: #c9d1d9;
+    border: 1px solid #30363d; border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus { outline: none; border-color: #58a6ff; }
+  input[type="number"] { width: 90px; }
+  select { cursor: pointer; }
+
+  button {
+    background: #238636; color: #fff; border-color: #238636;
+    cursor: pointer; font-weight: 500; padding: 0.5rem 1.25rem;
+    white-space: nowrap;
+  }
+  button:hover { background: #2ea043; }
+  button:disabled { opacity: 0.5; cursor: wait; }
+
+  /* Results */
+  .status { margin: 1rem 0; font-size: 0.85rem; color: #7d8590; }
+  .error { color: #f85149; background: #1a0c0c; border: 1px solid #f8514930; border-radius: 6px; padding: 0.75rem 1rem; margin: 1rem 0; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.85rem; }
+  th { text-align: left; color: #7d8590; font-weight: 500; font-size: 0.75rem; text-transform: uppercase;
+       letter-spacing: 0.05em; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th.num { text-align: right; }
+  td { padding: 0.6rem 0.75rem; border-bottom: 1px solid #21262d12; vertical-align: top; }
+  tr:hover td { background: #161b22; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .title-link { color: #58a6ff; text-decoration: none; }
+  .title-link:hover { text-decoration: underline; }
+  .author { color: #7d8590; }
+  .meta { color: #484f58; font-size: 0.75rem; margin-top: 0.15rem; }
+
+  .score-bar {
+    display: inline-block; height: 6px; border-radius: 3px;
+    background: #238636; min-width: 4px; max-width: 80px; vertical-align: middle;
+    margin-right: 0.4rem;
+  }
+
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #30363d;
+    border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.6s linear infinite;
+    vertical-align: middle; margin-right: 0.4rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .domain-hints { display: flex; gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
+  .hint { font-size: 0.75rem; color: #484f58; }
+  .hint strong { color: #7d8590; }
+</style>
+</head>
+<body>
+
+<h1>Trending From Obscurity</h1>
+<p class="tagline">Popularity is noise. The signal lives in the long tail.</p>
+
+<form class="search-bar" onsubmit="doSearch(event)">
+  <div class="field query">
+    <label for="q">Search</label>
+    <input type="text" id="q" placeholder="jazz piano, diffusion models, …" autofocus>
+  </div>
+  <div class="field">
+    <label for="domain">Domain</label>
+    <select id="domain" onchange="onDomainChange()">
+      <option value="hn">Hacker News</option>
+      <option value="github">GitHub</option>
+      <option value="youtube" selected>YouTube</option>
+      <option value="scholar">Semantic Scholar</option>
+      <option value="medium">Medium</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="pop">Max popularity</label>
+    <input type="number" id="pop" value="1000" min="1">
+  </div>
+  <div class="field">
+    <label for="days">Days</label>
+    <input type="number" id="days" value="14" min="1" max="365">
+  </div>
+  <div class="field">
+    <label for="limit">Limit</label>
+    <input type="number" id="limit" value="20" min="1" max="100">
+  </div>
+  <div class="field">
+    <label>&nbsp;</label>
+    <button type="submit" id="btn">Search</button>
+  </div>
+</form>
+
+<div class="domain-hints" id="hints"></div>
+<div id="status" class="status"></div>
+<div id="results"></div>
+
+<script>
+const DOMAIN_DEFAULTS = {
+  hn:      { pop: 1000, days: 1,  hint: 'Popularity = 1 (no followers on HN). Scores by points/hour.' },
+  github:  { pop: 50,   days: 30, hint: 'Popularity = star count. Finds repos with star velocity from a low base.' },
+  youtube: { pop: 1000, days: 14, hint: 'Popularity = subscriber count. Finds small channels with breakout videos.' },
+  scholar: { pop: 20,   days: 14, hint: 'Popularity = citation count. Finds papers with momentum vs few citations.' },
+  medium:  { pop: 1000, days: 7,  hint: 'Popularity = 1 (RSS has no follower data). Scores by recency.' },
+};
+
+function onDomainChange() {
+  const d = DOMAIN_DEFAULTS[document.getElementById('domain').value];
+  if (d) {
+    document.getElementById('pop').value = d.pop;
+    document.getElementById('days').value = d.days;
+    document.getElementById('hints').innerHTML = `<span class="hint">${d.hint}</span>`;
+  }
+}
+onDomainChange();
+
+async function doSearch(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn');
+  const status = document.getElementById('status');
+  const results = document.getElementById('results');
+
+  const query = document.getElementById('q').value.trim();
+  if (!query) { document.getElementById('q').focus(); return; }
+
+  const body = {
+    domain: document.getElementById('domain').value,
+    query,
+    max_popularity: parseInt(document.getElementById('pop').value) || 1000,
+    days: parseInt(document.getElementById('days').value) || 14,
+    limit: parseInt(document.getElementById('limit').value) || 20,
+  };
+
+  btn.disabled = true;
+  status.innerHTML = '<span class="spinner"></span>Searching…';
+  results.innerHTML = '';
+
+  try {
+    const resp = await fetch('/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      status.innerHTML = '';
+      results.innerHTML = `<div class="error">${esc(data.error)}</div>`;
+      return;
+    }
+
+    const items = data.results || [];
+    if (items.length === 0) {
+      status.innerHTML = 'No results found.';
+      return;
+    }
+
+    status.innerHTML = `${items.length} result${items.length !== 1 ? 's' : ''} for <strong>${esc(data.query)}</strong> on ${esc(data.domain)}`;
+
+    const maxScore = Math.max(...items.map(r => r.breakout_score));
+    results.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>#</th>
+          <th>Score</th>
+          <th class="num">Pop</th>
+          <th class="num">Activity</th>
+          <th class="num">Age</th>
+          <th>Author</th>
+          <th>Title</th>
+        </tr></thead>
+        <tbody>${items.map((r, i) => renderRow(r, i, maxScore)).join('')}</tbody>
+      </table>`;
+  } catch (err) {
+    status.innerHTML = '';
+    results.innerHTML = `<div class="error">Network error: ${esc(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderRow(r, i, maxScore) {
+  const barW = maxScore > 0 ? Math.max(4, (r.breakout_score / maxScore) * 80) : 4;
+  const meta = renderMeta(r);
+  return `<tr>
+    <td>${i + 1}</td>
+    <td><span class="score-bar" style="width:${barW}px"></span>${r.breakout_score.toFixed(1)}</td>
+    <td class="num">${fmt(r.popularity)}</td>
+    <td class="num">${fmt(Math.round(r.activity))}</td>
+    <td class="num">${fmtAge(r.age_days)}</td>
+    <td><span class="author">${esc(r.author)}</span></td>
+    <td>
+      <a class="title-link" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.title)}</a>
+      ${meta ? `<div class="meta">${meta}</div>` : ''}
+    </td>
+  </tr>`;
+}
+
+function renderMeta(r) {
+  const m = r.metadata || {};
+  switch (r.domain) {
+    case 'hn': return m.num_comments != null ? `${fmt(m.num_comments)} comments` : '';
+    case 'github': return [m.language, m.description].filter(Boolean).join(' · ');
+    case 'youtube': return [m.likes && `${fmt(m.likes)} likes`, m.comments && `${fmt(m.comments)} comments`].filter(Boolean).join(' · ');
+    case 'scholar': return [m.year && `${m.year}`, m.influential_citations && `${m.influential_citations} influential`].filter(Boolean).join(' · ');
+    case 'medium': return [m.reading_time_min && `${m.reading_time_min} min read`, m.categories?.slice(0, 3).join(', ')].filter(Boolean).join(' · ');
+    default: return '';
+  }
+}
+
+function fmt(n) { return n == null ? '' : n.toLocaleString(); }
+function fmtAge(d) {
+  if (d < 1) return Math.round(d * 24) + 'h';
+  if (d < 30) return Math.round(d) + 'd';
+  return Math.round(d / 30) + 'mo';
+}
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
