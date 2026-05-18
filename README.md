@@ -8,7 +8,7 @@ Contrarian search engine that finds emerging creators, projects, and papers show
 breakout_score = activity / (popularity × age)
 ```
 
-A video with 40K views from a 500-subscriber channel scores higher than one with 400K views from a 5M-subscriber channel. Applied across five domains:
+A video with 40K views from a 500-subscriber channel scores higher than one with 400K views from a 5M-subscriber channel. Applied across seven domains:
 
 | Domain | Activity | Popularity | Auth |
 |--------|----------|------------|------|
@@ -17,6 +17,8 @@ A video with 40K views from a 500-subscriber channel scores higher than one with
 | Hacker News | points | 1 (no followers) | none |
 | Semantic Scholar | citation velocity | citations | none |
 | Medium | tag breadth | 1 (RSS) | none |
+| Reddit | score (upvotes) | subreddit subscribers | none |
+| Hugging Face | likes | downloads | none |
 
 ## Usage
 
@@ -30,6 +32,8 @@ python server.py              # → http://localhost:8888
 python cli.py -d youtube -q "jazz piano" -p 1000 --days 14
 python cli.py -d hn -q "AI" --days 1
 python cli.py -d github -q "python" -p 50 --days 30
+python cli.py -d reddit -q "local LLM" -p 50000 --days 7
+python cli.py -d huggingface -q "diffusion" -p 1000 --days 30
 ```
 
 YouTube requires a [Data API v3 key](https://console.cloud.google.com/apis/credentials) in `.env`:
